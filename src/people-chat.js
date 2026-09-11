@@ -2,7 +2,7 @@
   const API = window.location.origin;
   const injectedStyle = document.createElement('style');
   injectedStyle.textContent = `
-    .people-chat-overlay { position: fixed; inset: 0; z-index: 100000; background: #fff; display: flex; flex-direction: column; }
+    .people-chat-overlay { position: fixed; left: 272px; top: 0; right: 0; bottom: 0; z-index: 100000; background: #fff; display: flex; flex-direction: column; }
     .people-chat-head { height: 76px; flex: 0 0 76px; border-bottom: 1px solid #e4e9ef; display:flex; align-items:center; justify-content:space-between; padding: 0 28px; box-sizing:border-box; background:#fff; }
     .people-chat-person { display:flex; align-items:center; gap:12px; min-width:0; }
     .people-chat-avatar { width:42px; height:42px; border-radius:50%; background:#edf1f5; display:grid; place-items:center; font-size:12px; font-weight:800; color:#17212d; }
@@ -23,7 +23,12 @@
     .people-chat-send { width:52px; height:44px; border:0; border-radius:11px; background:#182330; color:#fff; font-size:18px; cursor:pointer; }
     .people-chat-send:disabled { opacity:.55; cursor:default; }
     .people-chat-status { max-width:680px; margin:0 auto 12px; font-size:12px; color:#778393; }
-    @media (max-width: 700px) { .people-chat-head { padding:0 14px; } .people-chat-scroll { padding-left:12px; padding-right:12px; } .people-chat-bubble { max-width:86%; } }
+    @media (max-width: 700px) {
+      .people-chat-overlay { left: 0; }
+      .people-chat-head { padding:0 14px; }
+      .people-chat-scroll { padding-left:12px; padding-right:12px; }
+      .people-chat-bubble { max-width:86%; }
+    }
   `;
   document.head.appendChild(injectedStyle);
 
@@ -48,9 +53,6 @@
 
   function openChat(person) {
     if (!person.handle || document.querySelector('.people-chat-overlay')) return;
-
-    const communication = [...document.querySelectorAll('.nav-btn')].find(btn => btn.textContent.includes('Communication'));
-    if (communication) communication.click();
 
     const overlay = document.createElement('div');
     overlay.className = 'people-chat-overlay';
