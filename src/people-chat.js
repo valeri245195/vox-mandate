@@ -39,7 +39,7 @@
     const response = await fetch(`${API}/api/people/message`, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token()}` },
-      body: JSON.stringify({ userId: person.id, text })
+      body: JSON.stringify({ handle: person.handle, text })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Unable to send message.');
@@ -47,7 +47,7 @@
   }
 
   function openChat(person) {
-    if (document.querySelector('.people-chat-overlay')) return;
+    if (!person.handle || document.querySelector('.people-chat-overlay')) return;
 
     const communication = [...document.querySelectorAll('.nav-btn')].find(btn => btn.textContent.includes('Communication'));
     if (communication) communication.click();
@@ -63,7 +63,7 @@
     const note = document.createElement('div'); note.className = 'people-chat-note'; note.textContent = 'Direct conversation. Messages sent here are delivered to this user through Vox Mandate.';
     const status = document.createElement('div'); status.className = 'people-chat-status'; status.textContent = '';
     const messageList = document.createElement('div');
-    const storedKey = `vox_dm_${person.id}`;
+    const storedKey = `vox_dm_${person.handle}`;
     let localMessages = [];
     try { localMessages = JSON.parse(localStorage.getItem(storedKey) || '[]'); } catch { localMessages = []; }
 
@@ -114,8 +114,7 @@
     renderMessages();
     textarea.focus();
 
-    const close = () => overlay.remove();
-    header.querySelector('.people-chat-close').addEventListener('click', close);
+    header.querySelector('.people-chat-close').addEventListener('click', () => overlay.remove());
   }
 
   document.addEventListener('click', (event) => {
@@ -130,16 +129,6 @@
     const handleMatch = info.match(/@([a-z0-9_]+)/i);
     const typeMatch = info.match(/·\s*([^·]+)(?:·|$)/);
     const handle = handleMatch ? handleMatch[1] : '';
-    openChat({ id: row.dataset.userId, name, handle, type: typeMatch ? typeMatch[1].trim() : 'Vox Mandate user' });
+    openChat({ name, handle, type: typeMatch ? typeMatch[1].trim() : 'Vox Mandate user' });
   }, true);
-
-  const observer = new MutationObserver(() => {
-    document.querySelectorAll('.ud-person').forEach(row => {
-      if (row.dataset.userId) return;
-      const info = row.querySelector('.ud-person-main span')?.textContent || '';
-      const handleMatch = info.match(/@([a-z0-9_]+)/i);
-      if (handleMatch) row.dataset.userHandle = handleMatch[1];
-    });
-  });
-  observer.observe(document.body, { childList:true, subtree:true });
 })();
