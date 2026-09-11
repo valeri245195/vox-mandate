@@ -17,6 +17,8 @@ app.use(express.json({ limit: '1mb' }));
 const dataDir = path.join(__dirname, '..', 'data');
 const usersPath = path.join(dataDir, 'users.json');
 const sessionsPath = path.join(dataDir, 'sessions.json');
+const friendRequestsPath = path.join(dataDir, 'friend_requests.json');
+const directMessagesPath = path.join(dataDir, 'direct_messages.json');
 fs.mkdirSync(dataDir, { recursive: true });
 
 function readJson(file, fallback) {
@@ -36,6 +38,8 @@ function writeJson(file, value) {
 
 const users = readJson(usersPath, {});
 const sessions = readJson(sessionsPath, {});
+const friendRequests = readJson(friendRequestsPath, []);
+const directMessages = readJson(directMessagesPath, []);
 const messages = [];
 
 function normalizeHandle(value) {
@@ -50,6 +54,21 @@ function sanitizeProfile(user) {
   if (!user) return null;
   const { passwordHash, passwordSalt, ...safe } = user;
   return safe;
+}
+
+function sanitizePublicProfile(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    name: user.name,
+    handle: user.handle,
+    type: user.type,
+    city: user.city || '',
+    province: user.province || '',
+    role: user.role || '',
+    district: user.district || '',
+    bio: user.bio || '',
+  };
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
@@ -99,7 +118,7 @@ app.post('/api/auth/register', (req, res) => {
   const type = String(body.type || 'Voter').trim();
 
   if (!name || !handle || !email || !password) return res.status(400).json({ error: 'Name, username, email and password are required.' });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
   if (!['Voter', 'Candidate', 'Serving Politician'].includes(type)) return res.status(400).json({ error: 'Invalid account type.' });
 
@@ -167,11 +186,81 @@ app.put('/api/profile/me', requireAuth, (req, res) => {
   res.json({ profile: sanitizeProfile(next) });
 });
 
+// Temporary username discovery for the Contacts > Friends area.
+app.get('/api/people/search', requireAuth, (req, res) => {
+  const query = normalizeHandle(req.query?.q || '');
+  if (query.length < 2) return res.json({ people: [] });
+  const people = Object.values(users)
+    .filter(user => user.id !== req.user.id)
+    .filter(user => user.handle.includes(query) || user.name.toLowerCase().includes(String(req.query?.q || '').trim().toLowerCase()))
+    .sort((a, b) => a.handle.localeCompare(b.handle))
+    .slice(0, 20)
+    .map(sanitizePublicProfile);
+  res.json({ people });
+});
+
+app.post('/api/people/friends/request', requireAuth, (req, res) => {
+  const targetId = String(req.body?.userId || '');
+  const targetHandle = normalizeHandle(req.body?.handle || '');
+  const target = Object.values(users).find(user => user.id === targetId || user.handle === targetHandle);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot add yourself.' });
+
+  const duplicate = friendRequests.find(r => r.fromUserId === req.user.id && r.toUserId === target.id && r.status === 'pending');
+  if (duplicate) return res.status(409).json({ error: 'Friend request already sent.' });
+
+  const reverse = friendRequests.find(r => r.fromUserId === target.id && r.toUserId === req.user.id && r.status === 'pending');
+  if (reverse) return res.status(409).json({ error: 'This person already sent you a friend request.' });
+
+  friendRequests.push({
+    id: crypto.randomUUID(),
+    fromUserId: req.user.id,
+    toUserId: target.id,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  });
+  writeJson(friendRequestsPath, friendRequests);
+  res.status(201).json({ ok: true, message: `Friend request sent to @${target.handle}.` });
+});
+
+app.post('/api/people/message', requireAuth, (req, res) => {
+  const targetId = String(req.body?.userId || '');
+  const targetHandle = normalizeHandle(req.body?.handle || '');
+  const text = String(req.body?.text || '').trim().slice(0, 4000);
+  const target = Object.values(users).find(user => user.id === targetId || user.handle === targetHandle);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  if (!text) return res.status(400).json({ error: 'Message cannot be empty.' });
+  if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot message yourself.' });
+
+  const message = {
+    id: crypto.randomUUID(),
+    fromUserId: req.user.id,
+    toUserId: target.id,
+    text,
+    createdAt: new Date().toISOString(),
+  };
+  directMessages.push(message);
+  writeJson(directMessagesPath, directMessages);
+
+  io.to(`user:${target.id}`).emit('people:message', {
+    id: message.id,
+    from: sanitizePublicProfile(req.user),
+    text: message.text,
+    createdAt: message.createdAt,
+  });
+
+  res.status(201).json({ ok: true, message: 'Message sent.' });
+});
+
 app.get('/api/conversations/:id/messages', requireAuth, (req, res) => {
   res.json(messages.filter(m => m.conversationId === req.params.id));
 });
 
 io.on('connection', socket => {
+  socket.on('identify', ({ userId }) => {
+    if (userId) socket.join(`user:${userId}`);
+  });
+
   socket.on('join', ({ conversationId }) => {
     if (!conversationId) return;
     socket.join(`conversation:${conversationId}`);
