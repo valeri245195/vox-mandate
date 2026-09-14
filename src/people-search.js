@@ -1,6 +1,6 @@
 (() => {
   const API = window.location.origin;
-  const state = { lastMode: null, timer: null };
+  const state = { timer: null };
 
   const css = `
     .username-discovery { margin: 14px 0 18px; padding: 18px; border: 1px solid #dfe5ec; border-radius: 14px; background: #fff; }
@@ -103,18 +103,16 @@
     if (!page) return;
     const tabs = page.querySelector('.contact-content-tabs');
     if (!tabs) return;
-    const buttons = [...tabs.querySelectorAll('button')];
-    const friends = buttons.find(b => b.textContent.trim() === 'Friends');
-    if (!friends) return;
-    const mode = friends.classList.contains('active') ? 'friends' : 'politicians';
     let box = page.querySelector('.username-discovery');
-    if (mode !== 'friends') { if (box) box.remove(); state.lastMode = mode; return; }
     if (box) return;
     box = document.createElement('section'); box.className = 'username-discovery';
-    box.innerHTML = `<div class="ud-eyebrow">TEMPORARY FRIEND SEARCH</div><h3>Find someone by username</h3><p>Search by @username or name. Then send a friend request or write a message.</p><div class="ud-search-row"><input placeholder="@username" autocomplete="off"><button>Search</button></div><div class="ud-status"></div><div class="ud-results"></div>`;
+    box.innerHTML = `<div class="ud-eyebrow">PEOPLE SEARCH</div><h3>Find people on Vox Mandate</h3><p>Search by @username or name. Send a friend request or write a message.</p><div class="ud-search-row"><input placeholder="@username or name" autocomplete="off"><button>Search</button></div><div class="ud-status"></div><div class="ud-results"></div>`;
     const input = box.querySelector('input'); const button = box.querySelector('button');
+    let liveTimer;
     const run = () => searchUsers(input.value.trim().replace(/^@/, ''), box);
-    button.onclick = run; input.onkeydown = e => { if (e.key === 'Enter') run(); };
+    button.onclick = run;
+    input.oninput = () => { clearTimeout(liveTimer); liveTimer = setTimeout(run, 350); };
+    input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); run(); } };
     tabs.insertAdjacentElement('afterend', box);
   }
 
